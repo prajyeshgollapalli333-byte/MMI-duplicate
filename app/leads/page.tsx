@@ -1,29 +1,39 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 
 type Lead = {
   id: string
+  client_name: string
   phone: string
   email: string
   insurence_category: string
-  policy_type: string
   policy_flow: string
   status: string
   created_at: string
 }
 
+/* ✅ ALL FILTERS */
+const STATUS_FILTERS = [
+  { label: 'All', value: null },
+  { label: 'New Leads', value: 'new_lead' },
+  { label: 'Form Sent', value: 'form_sent' },
+  { label: 'Form Submitted', value: 'form_submitted' },
+  { label: 'Active', value: 'active' },
+]
+
 export default function MyLeadsPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const statusFilter = searchParams.get('status')
-  const docsFilter = searchParams.get('docs')
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
 
+  /* ================= LOAD LEADS ================= */
   useEffect(() => {
     const loadLeads = async () => {
       setLoading(true)
@@ -38,86 +48,108 @@ export default function MyLeadsPage() {
         .from('temp_leads_basics')
         .select(`
           id,
+          client_name,
           phone,
           email,
           insurence_category,
-          policy_type,
           policy_flow,
           status,
           created_at
         `)
+        .eq('assigned_csr', user.id)
         .order('created_at', { ascending: false })
 
-      // Filter by status (from dashboard cards)
       if (statusFilter) {
         query = query.eq('status', statusFilter)
       }
 
-      const { data: leadData, error } = await query
+      const { data, error } = await query
 
-      if (error || !leadData) {
-        setLeads([])
-        setLoading(false)
-        return
-      }
-
-      // If filtering by documents uploaded
-      if (docsFilter === 'true') {
-        const leadIds = leadData.map(l => l.id)
-
-        if (leadIds.length === 0) {
-          setLeads([])
-          setLoading(false)
-          return
-        }
-
-        const { data: forms } = await supabase
-          .from('temp_intake_forms')
-          .select('lead_id')
-          .in('lead_id', leadIds)
-
-        const leadsWithDocs = forms?.map(f => f.lead_id) || []
-
-        setLeads(leadData.filter(l => leadsWithDocs.includes(l.id)))
-      } else {
-        setLeads(leadData)
-      }
-
+      setLeads(error ? [] : data || [])
       setLoading(false)
     }
 
     loadLeads()
-  }, [statusFilter, docsFilter])
+  }, [statusFilter])
+
+  /* ================= FILTER HANDLER ================= */
+  const applyFilter = (status: string | null) => {
+    if (!status) {
+      router.push('/leads')
+    } else {
+      router.push(`/leads?status=${status}`)
+    }
+  }
+
+  /* ================= ACTION HANDLERS ================= */
+  const handleAccept = async (leadId: string) => {
+    await supabase
+      .from('temp_leads_basics')
+      .update({ status: 'active' })
+      .eq('id', leadId)
+
+    router.refresh()
+  }
+
+  const handleReject = async (leadId: string) => {
+    await supabase
+      .from('temp_leads_basics')
+      .update({ status: 'rejected' })
+      .eq('id', leadId)
+
+    router.refresh()
+  }
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">
-          My Leads
-          {statusFilter && (
-            <span className="text-sm text-gray-500 ml-2">
-              ({statusFilter.replace('_', ' ')})
-            </span>
-          )}
-        </h1>
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-semibold">My Leads</h1>
 
         <Link
           href="/leads/new"
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
         >
           + New Lead
         </Link>
       </div>
 
+      {/* FILTER TABS */}
+      <div className="flex gap-3 mb-6">
+        {STATUS_FILTERS.map(filter => {
+          const isActive =
+            (!filter.value && !statusFilter) ||
+            filter.value === statusFilter
+
+          return (
+            <button
+              key={filter.label}
+              onClick={() => applyFilter(filter.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium border
+                ${
+                  isActive
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 hover:bg-gray-100'
+                }
+              `}
+            >
+              {filter.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* TABLE */}
       {loading ? (
         <p>Loading leads...</p>
       ) : leads.length === 0 ? (
         <p>No leads found.</p>
       ) : (
-        <div className="overflow-x-auto border rounded">
+        <div className="overflow-x-auto bg-white border rounded-xl shadow-sm">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-100">
+            <thead className="bg-gray-100 text-gray-700">
               <tr>
+                <th className="px-4 py-3 text-left">Client Name</th>
                 <th className="px-4 py-3 text-left">Phone</th>
                 <th className="px-4 py-3 text-left">Email</th>
                 <th className="px-4 py-3 text-left">Category</th>
@@ -130,7 +162,10 @@ export default function MyLeadsPage() {
 
             <tbody>
               {leads.map(lead => (
-                <tr key={lead.id} className="border-t">
+                <tr key={lead.id} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium">
+                    {lead.client_name}
+                  </td>
                   <td className="px-4 py-3">{lead.phone}</td>
                   <td className="px-4 py-3">{lead.email}</td>
                   <td className="px-4 py-3 capitalize">
@@ -145,21 +180,53 @@ export default function MyLeadsPage() {
                   <td className="px-4 py-3">
                     {new Date(lead.created_at).toLocaleDateString()}
                   </td>
+
+                  {/* ACTIONS */}
                   <td className="px-4 py-3 space-x-3">
                     <Link
                       href={`/leads/${lead.id}`}
-                      className="text-blue-600 underline"
+                      className="text-blue-600 hover:underline font-medium"
                     >
                       View
                     </Link>
 
                     {lead.status === 'new_lead' && (
                       <Link
-                        href={`/leads/${lead.id}/send-form`}
-                        className="text-green-600 underline"
+                        href={`/leads/send-form?id=${lead.id}`}
+                        className="text-green-600 hover:underline font-medium"
                       >
-                        Send Form
+                        Send Initial Email
                       </Link>
+                    )}
+
+                    {lead.status === 'form_sent' && (
+                      <span className="text-gray-400 text-sm">
+                        Waiting for client
+                      </span>
+                    )}
+
+                    {lead.status === 'form_submitted' && (
+                      <>
+                        <button
+                          onClick={() => handleAccept(lead.id)}
+                          className="text-green-600 hover:underline font-medium"
+                        >
+                          Accept
+                        </button>
+
+                        <button
+                          onClick={() => handleReject(lead.id)}
+                          className="text-red-600 hover:underline font-medium"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {lead.status === 'active' && (
+                      <span className="text-green-700 font-medium text-sm">
+                        Active
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -172,18 +239,21 @@ export default function MyLeadsPage() {
   )
 }
 
+/* ================= STATUS BADGE ================= */
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === 'new_lead'
       ? 'bg-yellow-100 text-yellow-800'
       : status === 'form_sent'
       ? 'bg-blue-100 text-blue-800'
+      : status === 'form_submitted'
+      ? 'bg-purple-100 text-purple-800'
       : status === 'active'
       ? 'bg-green-100 text-green-800'
       : 'bg-gray-100 text-gray-800'
 
   return (
-    <span className={`px-2 py-1 rounded text-xs font-medium ${color}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>
       {status.replace('_', ' ')}
     </span>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 type EmailTemplate = {
@@ -12,24 +12,48 @@ type EmailTemplate = {
 }
 
 export default function SendFormPage() {
-  const { id } = useParams()
+  const searchParams = useSearchParams()
   const router = useRouter()
+
+  const leadId = searchParams.get('id') // ✅ correct
 
   const [lead, setLead] = useState<any>(null)
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [templateId, setTemplateId] = useState('')
   const [formType, setFormType] = useState('')
+  const [intakeId, setIntakeId] = useState<string | null>(null)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /* ================= LOAD LEAD + TEMPLATES ================= */
   useEffect(() => {
+    if (!leadId) return
+
     const loadData = async () => {
-      const { data: leadData } = await supabase
+      // ✅ FETCH ALL LEAD FIELDS
+      const { data: leadData, error: leadError } = await supabase
         .from('temp_leads_basics')
-        .select('id, email, policy_type')
-        .eq('id', id)
+        .select(`
+          id,
+          client_name,
+          phone,
+          email,
+          insurence_category,
+          policy_type,
+          policy_flow,
+          status,
+          created_at
+        `)
+        .eq('id', leadId)
         .single()
 
+      if (leadError) {
+        setError(leadError.message)
+        return
+      }
+
+      // email templates
       const { data: templateData } = await supabase
         .from('email_templates')
         .select('*')
@@ -40,10 +64,61 @@ export default function SendFormPage() {
     }
 
     loadData()
-  }, [id])
+  }, [leadId])
 
+  /* ================= ENSURE INTAKE FORM ================= */
+  const ensureIntakeForm = async () => {
+    if (!leadId || !formType) return null
+
+    // check existing
+    const { data: existing } = await supabase
+      .from('temp_intake_forms')
+      .select('id')
+      .eq('lead_id', leadId)
+      .eq('form_type', formType)
+      .single()
+
+    if (existing?.id) {
+      setIntakeId(existing.id)
+      return existing.id
+    }
+
+    // create new
+    const { data, error } = await supabase
+      .from('temp_intake_forms')
+      .insert({
+        lead_id: leadId,
+        form_type: formType,
+        status: 'sent',
+      })
+      .select()
+      .single()
+
+    if (error) {
+      setError(error.message)
+      return null
+    }
+
+    setIntakeId(data.id)
+    return data.id
+  }
+
+  /* ================= PREVIEW FORM ================= */
+  const handlePreview = async () => {
+    if (!formType) {
+      setError('Select form type first')
+      return
+    }
+
+    const id = await ensureIntakeForm()
+    if (!id) return
+
+    window.open(`/intake/${id}?preview=true`, '_blank')
+  }
+
+  /* ================= SEND INITIAL EMAIL ================= */
   const handleSend = async () => {
-    if (!selectedTemplateId || !formType) {
+    if (!templateId || !formType || !leadId) {
       setError('Please select email template and form type')
       return
     }
@@ -51,37 +126,38 @@ export default function SendFormPage() {
     setLoading(true)
     setError(null)
 
-    const template = templates.find(t => t.id === selectedTemplateId)
+    const template = templates.find(t => t.id === templateId)
     if (!template) {
-      setError('Invalid email template selected')
+      setError('Invalid email template')
       setLoading(false)
       return
     }
 
-    // 1️⃣ Update lead
+    const id = await ensureIntakeForm()
+    if (!id) {
+      setLoading(false)
+      return
+    }
+
+    // update lead
     await supabase
       .from('temp_leads_basics')
       .update({
         status: 'form_sent',
-        form_type: formType,
-        form_sent_at: new Date(),
+        form_sent_at: new Date().toISOString(),
       })
-      .eq('id', id)
+      .eq('id', leadId)
 
-    // 2️⃣ Generate intake link
+    // email body
     const formLink = `${window.location.origin}/intake/${id}`
-
-    // 3️⃣ Replace placeholders
-    let emailBody = template.body
+    const emailBody = template.body
+      .replace('{{client_name}}', lead.client_name)
       .replace('{{form_link}}', formLink)
-      .replace('{{client_name}}', lead.email)
 
-    // 4️⃣ Open Outlook
-    const mailtoUrl = `mailto:${lead.email}?subject=${encodeURIComponent(
+    // open outlook
+    window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent(
       template.subject
     )}&body=${encodeURIComponent(emailBody)}`
-
-    window.location.href = mailtoUrl
 
     setLoading(false)
     router.push('/leads')
@@ -89,72 +165,67 @@ export default function SendFormPage() {
 
   if (!lead) return <div className="p-10">Loading...</div>
 
+  /* ================= UI ================= */
   return (
-    <div className="max-w-2xl mx-auto p-10">
+    <div className="max-w-3xl mx-auto p-10">
       <h1 className="text-2xl font-semibold mb-6">
         Send Initial Email
       </h1>
 
-      {/* Lead Info */}
-      <div className="mb-6 p-4 rounded border bg-gray-50 text-sm space-y-1">
+      {/* ✅ FULL LEAD SUMMARY (NOW MATCHES NEW LEAD PAGE) */}
+      <div className="mb-6 p-4 border rounded bg-gray-50 text-sm space-y-1">
+        <p><b>Client Name:</b> {lead.client_name}</p>
         <p><b>Email:</b> {lead.email}</p>
+        <p><b>Phone:</b> {lead.phone}</p>
+        <p><b>Insurance Category:</b> {lead.insurence_category}</p>
         <p><b>Policy Type:</b> {lead.policy_type}</p>
+        <p><b>Policy Flow:</b> {lead.policy_flow}</p>
+        <p><b>Status:</b> {lead.status}</p>
       </div>
 
-      {/* 🔍 PREVIEW FORM (CSR) */}
+      {/* PREVIEW */}
       <button
-        onClick={() =>
-          window.open(`/intake/${id}?preview=true`, '_blank')
-        }
-        className="w-full mb-5 bg-gray-800 text-white py-2 rounded font-medium"
+        onClick={handlePreview}
+        className="w-full mb-5 bg-gray-800 text-white py-2 rounded"
       >
         Preview Form (CSR View)
       </button>
 
-      {/* Email Template */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">
-          Email Template
-        </label>
-        <select
-          value={selectedTemplateId}
-          onChange={e => setSelectedTemplateId(e.target.value)}
-          className="w-full border rounded px-3 py-2"
-        >
-          <option value="">Select Email Template</option>
-          {templates.map(t => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* EMAIL TEMPLATE */}
+      <select
+        value={templateId}
+        onChange={e => setTemplateId(e.target.value)}
+        className="w-full border p-3 rounded mb-4"
+      >
+        <option value="">Select Email Template</option>
+        {templates.map(t => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
 
-      {/* Form Type */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">
-          Form Type
-        </label>
-        <select
-          value={formType}
-          onChange={e => setFormType(e.target.value)}
-          className="w-full border rounded px-3 py-2"
-        >
-          <option value="">Select Form Type</option>
-          <option value="home">Home Insurance</option>
-          <option value="auto">Auto Insurance</option>
-          <option value="home_auto">Home + Auto</option>
-        </select>
-      </div>
+      {/* FORM TYPE */}
+      <select
+        value={formType}
+        onChange={e => setFormType(e.target.value)}
+        className="w-full border p-3 rounded mb-4"
+      >
+        <option value="">Select Form Type</option>
+        <option value="home">Home</option>
+        <option value="auto">Auto</option>
+        <option value="condo">Condo</option>
+        <option value="landlord_home">Landlord Home</option>
+      </select>
 
       {error && <p className="text-red-500 mb-3">{error}</p>}
 
       <button
         onClick={handleSend}
         disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 rounded font-medium"
+        className="w-full bg-blue-600 text-white py-3 rounded"
       >
-        {loading ? 'Preparing Email...' : 'Send Initial Email'}
+        {loading ? 'Preparing Email…' : 'Send Initial Email'}
       </button>
     </div>
   )

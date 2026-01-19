@@ -2,13 +2,16 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image' // Added import
 import { supabase } from '@/lib/supabaseClient'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [captcha, setCaptcha] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -48,69 +51,74 @@ export default function LoginPage() {
 
   return (
     <div style={styles.wrapper}>
-      {/* LEFT PANEL */}
-      <div style={styles.left}>
-        <img src="/login/bg.jpg" alt="Insurance CRM" style={styles.bgImage} />
+      {/* BACKGROUND IMAGE - Using Next/Image for reliability */}
+      <Image
+        src="/login/bg.png"
+        alt="Background"
+        fill
+        priority
+        quality={100}
+        style={{
+          objectFit: 'cover',
+          objectPosition: 'center 25%',
+          zIndex: -1,
+        }}
+      />
 
-        <div style={styles.redDiagonal} />
-        <div style={styles.blueDiagonal} />
+      {/* LOGIN CARD */}
+      <div style={styles.card}>
+        <h2 style={styles.title}>Login</h2>
 
-        <div style={styles.leftContent}>
-          <h1>Insurance CRM</h1>
-          <p>Secure access to insurance operations</p>
+        <div style={styles.field}>
+          <label>User ID</label>
+          <input
+            type="email"
+            placeholder="Enter User ID"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </div>
 
-        <div style={styles.badge}>
-          100% Satisfaction <br /> Guarantee
-        </div>
-      </div>
-
-      {/* RIGHT PANEL */}
-      <div style={styles.right}>
-        <div style={styles.card}>
-          <h2 style={styles.title}>Login</h2>
-
-          <div style={styles.field}>
-            <label>User ID</label>
+        <div style={styles.field}>
+          <label>Password</label>
+          <div style={styles.passwordWrapper}>
             <input
-              type="email"
-              placeholder="Enter User ID"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div style={styles.field}>
-            <label>Password</label>
-            <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Enter Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              style={{ paddingRight: '40px' }}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
           </div>
-
-          <div style={styles.captchaRow}>
-            <div style={styles.captchaBox}>{CAPTCHA_CODE}</div>
-            <input
-              placeholder="Enter Captcha"
-              value={captcha}
-              onChange={(e) => setCaptcha(e.target.value)}
-            />
-          </div>
-
-          {error && <p style={styles.error}>{error}</p>}
-
-          <button
-            style={styles.button}
-            disabled={loading}
-            onClick={handleLogin}
-          >
-            {loading ? 'Logging in...' : 'Submit'}
-          </button>
-
-          <p style={styles.forgot}>Forgot Password?</p>
         </div>
+
+        <div style={styles.captchaRow}>
+          <div style={styles.captchaBox}>{CAPTCHA_CODE}</div>
+          <input
+            placeholder="Enter Captcha"
+            value={captcha}
+            onChange={(e) => setCaptcha(e.target.value)}
+          />
+        </div>
+
+        {error && <p style={styles.error}>{error}</p>}
+
+        <button
+          style={styles.button}
+          disabled={loading}
+          onClick={handleLogin}
+        >
+          {loading ? 'Logging in...' : 'Submit'}
+        </button>
+
+        <p style={styles.forgot}>Forgot Password?</p>
       </div>
     </div>
   )
@@ -120,17 +128,13 @@ export default function LoginPage() {
 
 const styles: any = {
   wrapper: {
-    display: 'flex',
     height: '100vh',
     width: '100%',
-    fontFamily: 'Inter, sans-serif',
-  },
-
-  left: {
-    flex: 1,
     position: 'relative',
-    overflow: 'hidden',
-    color: '#fff',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontFamily: 'Inter, sans-serif',
   },
 
   bgImage: {
@@ -138,71 +142,51 @@ const styles: any = {
     inset: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
-    zIndex: 0,
-  },
-
-  redDiagonal: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '60%',
-    height: '45%',
-    background: '#c4161c',
-    clipPath: 'polygon(0 30%, 100% 0, 0 100%)',
-    zIndex: 1,
-  },
-
-  blueDiagonal: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: '65%',
-    height: '55%',
-    background: '#0b1f33',
-    clipPath: 'polygon(100% 20%, 100% 100%, 0 100%)',
-    zIndex: 1,
-  },
-
-  leftContent: {
-    position: 'relative',
-    zIndex: 2,
-    padding: '80px',
-    maxWidth: '420px',
-  },
-
-  badge: {
-    position: 'absolute',
-    bottom: '40px',
-    left: '80px',
-    zIndex: 2,
-    fontSize: '22px',
-    fontWeight: 600,
-  },
-
-  right: {
-    flex: 1,
-    backgroundColor: '#f7f8fa',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    objectFit: 'cover', // Prevents stretching
+    objectPosition: 'center bottom', // Anchors image to bottom to keep design elements visible
+    zIndex: -1,
   },
 
   card: {
     width: '420px',
-    background: '#fff',
+    background: 'rgba(255, 255, 255, 0.25)', // Increased transparency
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     padding: '40px',
     borderRadius: '16px',
-    boxShadow: '0 20px 45px rgba(0,0,0,0.12)',
+    boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+    border: '1px solid rgba(255, 255, 255, 0.18)',
+    zIndex: 1,
   },
 
   title: {
     textAlign: 'center',
     marginBottom: '30px',
+    fontSize: '28px',
+    fontWeight: '700',
+    color: '#333',
   },
 
   field: {
     marginBottom: '18px',
+  },
+
+  passwordWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+  },
+
+  eyeButton: {
+    position: 'absolute',
+    right: '12px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#555',
+    display: 'flex',
+    alignItems: 'center',
   },
 
   captchaRow: {
@@ -215,7 +199,7 @@ const styles: any = {
   captchaBox: {
     minWidth: '110px',
     height: '44px',
-    background: '#f1f1f1',
+    background: 'rgba(255, 255, 255, 0.6)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -233,20 +217,28 @@ const styles: any = {
     border: 'none',
     borderRadius: '8px',
     fontSize: '16px',
+    fontWeight: '600',
     cursor: 'pointer',
+    transition: 'background 0.3s',
   },
 
   error: {
     color: '#d32f2f',
     fontSize: '14px',
     marginBottom: '10px',
+    textAlign: 'center',
+    background: 'rgba(255,255,255,0.8)',
+    padding: '4px',
+    borderRadius: '4px'
   },
 
   forgot: {
     marginTop: '18px',
     textAlign: 'center',
-    color: '#777',
+    color: '#333',
     cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
   },
 }
 
@@ -268,6 +260,11 @@ if (typeof document !== 'undefined') {
       margin-bottom: 6px;
       font-size: 14px;
       font-weight: 500;
+    }
+    /* Hide native password reveal button in Edge/IE */
+    input::-ms-reveal,
+    input::-ms-clear {
+      display: none;
     }
   `
   document.head.appendChild(style)
