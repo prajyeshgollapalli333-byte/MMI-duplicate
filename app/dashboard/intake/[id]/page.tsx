@@ -9,12 +9,14 @@ import AutoInsuranceForm from '@/components/forms/AutoInsuranceForm'
 import CondoInsuranceForm from '@/components/forms/CondoInsuranceForm'
 
 export default function IntakeFormPage() {
-  const params = useParams()
-  const intakeId = params.id as string
+  /* ================= ROUTER PARAMS ================= */
+  const params = useParams<{ id: string }>()
+  const intakeId = params?.id
 
   const searchParams = useSearchParams()
   const isPreview = searchParams.get('preview') === 'true'
 
+  /* ================= STATE ================= */
   const [formType, setFormType] = useState<string | null>(null)
   const [formData, setFormData] = useState<any>({})
   const [loading, setLoading] = useState(true)
@@ -59,20 +61,16 @@ export default function IntakeFormPage() {
   /* ================= FORM FIELD CHANGE ================= */
   const handleFieldChange = (field: string, value: any) => {
     if (isPreview) return
-
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-    }))
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   /* ================= SUBMIT FORM ================= */
   const handleSubmit = async () => {
-    if (isPreview) return
+    if (isPreview || !intakeId) return
 
     setError(null)
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('temp_intake_forms')
       .update({
         form_data: formData,
@@ -81,12 +79,12 @@ export default function IntakeFormPage() {
       })
       .eq('id', intakeId)
 
-    if (updateError) {
-      setError(updateError.message)
+    if (error) {
+      setError(error.message)
       return
     }
 
-    // Email / Edge function (optional for now)
+    /* CSR Email / Edge Function */
     try {
       await fetch(
         'https://welhzcasuabhqoccfxtu.functions.supabase.co/notify-csr-on-submit',
@@ -104,25 +102,17 @@ export default function IntakeFormPage() {
   }
 
   /* ================= UI STATES ================= */
-  if (loading) {
-    return <div className="p-10">Loading...</div>
-  }
+  if (loading) return <div className="p-10">Loading...</div>
 
   if (error) {
-    return (
-      <div className="p-10 text-red-600 font-medium">
-        {error}
-      </div>
-    )
+    return <div className="p-10 text-red-600 font-medium">{error}</div>
   }
 
   if (submitted) {
     return (
       <div className="p-10 text-center">
         <h2 className="text-2xl font-semibold">Thank you!</h2>
-        <p className="mt-2">
-          Your form has been submitted successfully.
-        </p>
+        <p className="mt-2">Your form has been submitted successfully.</p>
       </div>
     )
   }
@@ -140,7 +130,6 @@ export default function IntakeFormPage() {
         </div>
       )}
 
-      {/* 🏠 HOME INSURANCE */}
       {formType === 'home' && (
         <HomeInsuranceForm
           data={formData}
@@ -149,7 +138,6 @@ export default function IntakeFormPage() {
         />
       )}
 
-      {/* 🚗 AUTO INSURANCE */}
       {formType === 'auto' && (
         <AutoInsuranceForm
           data={formData}
@@ -158,7 +146,6 @@ export default function IntakeFormPage() {
         />
       )}
 
-      {/* 🏢 CONDO INSURANCE */}
       {formType === 'condo' && (
         <CondoInsuranceForm
           data={formData}
