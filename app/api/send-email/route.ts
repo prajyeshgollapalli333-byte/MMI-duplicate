@@ -4,8 +4,9 @@ import nodemailer from 'nodemailer'
 
 export async function POST(req: Request) {
   try {
-    /* ================= READ REQUEST BODY ================= */
     const { leadId, templateId, formType } = await req.json()
+
+    console.log('SEND EMAIL API HIT:', { leadId, templateId, formType })
 
     if (!leadId || !templateId || !formType) {
       return NextResponse.json(
@@ -17,11 +18,12 @@ export async function POST(req: Request) {
     /* ================= FETCH LEAD ================= */
     const { data: lead, error: leadError } = await supabaseServer
       .from('temp_leads_basics')
-      .select('id, client_name, email')
+      .select('id, client_name, email, stage_metadata')
       .eq('id', leadId)
       .single()
 
     if (leadError || !lead || !lead.email) {
+      console.error('LEAD FETCH ERROR:', leadError)
       return NextResponse.json(
         { error: 'Invalid lead or missing email' },
         { status: 404 }
@@ -37,6 +39,7 @@ export async function POST(req: Request) {
       .single()
 
     if (templateError || !template) {
+      console.error('TEMPLATE FETCH ERROR:', templateError)
       return NextResponse.json(
         { error: 'Email template not found or inactive' },
         { status: 404 }
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
       .replace(/{{\s*client_name\s*}}/g, lead.client_name || '')
       .replace(/{{\s*form_link\s*}}/g, formLink)
 
-    /* ================= SMTP TRANSPORT (ETHEREAL / REAL SMTP) ================= */
+    /* ================= SMTP TRANSPORT ================= */
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT),
@@ -78,35 +81,56 @@ export async function POST(req: Request) {
       html: emailBody,
     })
 
-    // 🔹 Ethereal preview link (VERY IMPORTANT FOR TESTING)
+    console.log('EMAIL SENT SUCCESSFULLY')
     console.log('Email preview URL:', nodemailer.getTestMessageUrl(info))
 
-    /* ================= LOG EMAIL ================= */
-    await supabaseServer.from('email_logs').insert({
-      lead_id: lead.id,
-      template_id: template.id,
-      to_email: lead.email,
-      subject: template.subject,
-      status: 'sent',
-    })
+    /* ================= OPTIONAL EMAIL LOG ================= */
+    const { error: emailLogError } = await supabaseServer
+      .from('email_logs')
+      .insert({
+        lead_id: lead.id,
+        template_id: template.id,
+        to_email: lead.email,
+        subject: template.subject,
+        status: 'sent',
+      })
+
+    if (emailLogError) {
+      console.warn('EMAIL LOG INSERT SKIPPED:', emailLogError.message)
+    }
 
     /* ================= SET FOLLOW-UP DATE (+48 HOURS) ================= */
     const followUpDate = new Date()
     followUpDate.setHours(followUpDate.getHours() + 48)
 
-    await supabaseServer
+    /* ================= RECORD ACTION (NOT STAGE) ================= */
+    const updatedStageMetadata = {
+      ...(lead.stage_metadata || {}),
+      email_sent: true,
+      email_sent_at: new Date().toISOString(),
+    }
+
+    const { error: updateError } = await supabaseServer
       .from('temp_leads_basics')
       .update({
+        stage_metadata: updatedStageMetadata,
         follow_up_date: followUpDate.toISOString(),
-        status: 'email_sent',
       })
       .eq('id', lead.id)
 
-    /* ================= SUCCESS RESPONSE ================= */
+    if (updateError) {
+      console.error('FAILED TO UPDATE STAGE METADATA:', updateError)
+      return NextResponse.json(
+        { error: 'Failed to record email action' },
+        { status: 500 }
+      )
+    }
+
+    console.log('EMAIL ACTION RECORDED (STAGE NOT CHANGED)')
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Send email API error:', error)
-
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

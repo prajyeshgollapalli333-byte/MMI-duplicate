@@ -1,10 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image' // Added import
+import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
 import { Eye, EyeOff } from 'lucide-react'
+
+/* ================= CAPTCHA GENERATOR ================= */
+const generateCaptcha = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let result = ''
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -12,11 +22,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
   const [captcha, setCaptcha] = useState('')
+  const [captchaInput, setCaptchaInput] = useState('')
+
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const CAPTCHA_CODE = 'BVJZR3'
+  /* 🔄 Generate captcha on page load */
+  useEffect(() => {
+    setCaptcha(generateCaptcha())
+  }, [])
 
   const handleLogin = async () => {
     setError('')
@@ -26,14 +42,16 @@ export default function LoginPage() {
       return
     }
 
-    if (captcha !== CAPTCHA_CODE) {
+    if (captchaInput.trim().toUpperCase() !== captcha) {
       setError('Invalid captcha')
+      setCaptcha(generateCaptcha()) // regenerate
+      setCaptchaInput('')
       return
     }
 
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -42,27 +60,24 @@ export default function LoginPage() {
 
     if (error) {
       setError(error.message)
+      setCaptcha(generateCaptcha())
+      setCaptchaInput('')
       return
     }
 
-    // ✅ Login success → redirect
     router.push('/dashboard')
   }
 
   return (
     <div style={styles.wrapper}>
-      {/* BACKGROUND IMAGE - Using Next/Image for reliability */}
+      {/* BACKGROUND IMAGE */}
       <Image
         src="/login/bg.png"
         alt="Background"
         fill
         priority
         quality={100}
-        style={{
-          objectFit: 'cover',
-          objectPosition: 'center 25%',
-          zIndex: -1,
-        }}
+        style={{ objectFit: 'cover', objectPosition: 'center 25%', zIndex: -1 }}
       />
 
       {/* LOGIN CARD */}
@@ -75,7 +90,7 @@ export default function LoginPage() {
             type="email"
             placeholder="Enter User ID"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={e => setEmail(e.target.value)}
           />
         </div>
 
@@ -86,7 +101,7 @@ export default function LoginPage() {
               type={showPassword ? 'text' : 'password'}
               placeholder="Enter Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               style={{ paddingRight: '40px' }}
             />
             <button
@@ -99,12 +114,21 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* CAPTCHA */}
         <div style={styles.captchaRow}>
-          <div style={styles.captchaBox}>{CAPTCHA_CODE}</div>
+          <div
+            style={styles.captchaBox}
+            onCopy={e => e.preventDefault()}
+            onContextMenu={e => e.preventDefault()}
+            onMouseDown={e => e.preventDefault()}
+          >
+            {captcha}
+          </div>
+
           <input
             placeholder="Enter Captcha"
-            value={captcha}
-            onChange={(e) => setCaptcha(e.target.value)}
+            value={captchaInput}
+            onChange={e => setCaptchaInput(e.target.value.toUpperCase())}
           />
         </div>
 
@@ -137,25 +161,15 @@ const styles: any = {
     fontFamily: 'Inter, sans-serif',
   },
 
-  bgImage: {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover', // Prevents stretching
-    objectPosition: 'center bottom', // Anchors image to bottom to keep design elements visible
-    zIndex: -1,
-  },
-
   card: {
     width: '420px',
-    background: 'rgba(255, 255, 255, 0.25)', // Increased transparency
+    background: 'rgba(255, 255, 255, 0.25)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
     padding: '40px',
     borderRadius: '16px',
-    boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-    border: '1px solid rgba(255, 255, 255, 0.18)',
+    boxShadow: '0 8px 32px rgba(31,38,135,0.37)',
+    border: '1px solid rgba(255,255,255,0.18)',
     zIndex: 1,
   },
 
@@ -167,15 +181,12 @@ const styles: any = {
     color: '#333',
   },
 
-  field: {
-    marginBottom: '18px',
-  },
+  field: { marginBottom: '18px' },
 
   passwordWrapper: {
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
-    width: '100%',
   },
 
   eyeButton: {
@@ -184,9 +195,6 @@ const styles: any = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    color: '#555',
-    display: 'flex',
-    alignItems: 'center',
   },
 
   captchaRow: {
@@ -197,15 +205,17 @@ const styles: any = {
   },
 
   captchaBox: {
-    minWidth: '110px',
+    minWidth: '120px',
     height: '44px',
-    background: 'rgba(255, 255, 255, 0.6)',
+    background: 'rgba(255,255,255,0.7)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontWeight: 700,
-    letterSpacing: '2px',
+    letterSpacing: '4px',
     borderRadius: '6px',
+    userSelect: 'none',
+    pointerEvents: 'none',
   },
 
   button: {
@@ -219,30 +229,25 @@ const styles: any = {
     fontSize: '16px',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: 'background 0.3s',
   },
 
   error: {
     color: '#d32f2f',
     fontSize: '14px',
-    marginBottom: '10px',
     textAlign: 'center',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '4px',
-    borderRadius: '4px'
+    marginBottom: '10px',
   },
 
   forgot: {
     marginTop: '18px',
     textAlign: 'center',
-    color: '#333',
-    cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '600',
+    cursor: 'pointer',
   },
 }
 
-/* GLOBAL INPUT + LABEL STYLES */
+/* GLOBAL INPUT STYLES */
 if (typeof document !== 'undefined') {
   const style = document.createElement('style')
   style.innerHTML = `
@@ -252,7 +257,6 @@ if (typeof document !== 'undefined') {
       padding: 0 12px;
       border: 1px solid #ccc;
       border-radius: 6px;
-      box-sizing: border-box;
       font-size: 14px;
     }
     label {
@@ -261,7 +265,6 @@ if (typeof document !== 'undefined') {
       font-size: 14px;
       font-weight: 500;
     }
-    /* Hide native password reveal button in Edge/IE */
     input::-ms-reveal,
     input::-ms-clear {
       display: none;

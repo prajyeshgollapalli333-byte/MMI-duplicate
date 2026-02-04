@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabaseClient'
 
 import HomeInsuranceForm from '@/components/forms/HomeInsuranceForm'
 import AutoInsuranceForm from '@/components/forms/AutoInsuranceForm'
-import CondoInsuranceForm from '@/components/forms/CondoInsuranceForm'
+import PrimaryApplicantForm from '@/components/forms/PrimaryApplicantForm' 
+import CoApplicantForm from '@/components/forms/CoApplicantForm'
 
 export default function IntakeFormPage() {
   /* ================= ROUTER PARAMS ================= */
@@ -18,7 +19,14 @@ export default function IntakeFormPage() {
 
   /* ================= STATE ================= */
   const [formType, setFormType] = useState<string | null>(null)
-  const [formData, setFormData] = useState<any>({})
+  const [formData, setFormData] = useState<any>({
+    primary_applicant: {},
+    co_applicant: {},
+    home: {},
+    auto: {},
+    vehicles: [],
+    additional_applicants: []
+  })
   const [loading, setLoading] = useState(true)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,20 +59,47 @@ export default function IntakeFormPage() {
       }
 
       setFormType(data.form_type)
-      setFormData(data.form_data || {})
+      setFormData({
+        primary_applicant: {},
+        co_applicant: {},
+        home: {},
+        auto: {},
+        vehicles: [],
+        additional_applicants: [],
+        ...(data.form_data || {})
+      })
+
       setLoading(false)
     }
 
     loadIntake()
   }, [intakeId])
 
-  /* ================= FORM FIELD CHANGE ================= */
-  const handleFieldChange = (field: string, value: any) => {
+  /* ================= SECTION UPDATE HANDLER ================= */
+  const updateSection = (section: string, value: any) => {
     if (isPreview) return
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev: any) => ({
+      ...prev,
+      [section]: value
+    }))
   }
 
-  /* ================= SUBMIT FORM ================= */
+  /* ================= SAVE (PARTIAL) ================= */
+  const handleSave = async () => {
+    if (isPreview || !intakeId) return
+
+    await supabase
+      .from('temp_intake_forms')
+      .update({
+        form_data: formData,
+        status: 'draft'
+      })
+      .eq('id', intakeId)
+
+    alert('Progress saved. You can continue later.')
+  }
+
+  /* ================= SUBMIT (FINAL) ================= */
   const handleSubmit = async () => {
     if (isPreview || !intakeId) return
 
@@ -74,28 +109,14 @@ export default function IntakeFormPage() {
       .from('temp_intake_forms')
       .update({
         form_data: formData,
-        status: 'completed',
-        submitted_at: new Date().toISOString(),
+        status: 'submitted',
+        submitted_at: new Date().toISOString()
       })
       .eq('id', intakeId)
 
     if (error) {
       setError(error.message)
       return
-    }
-
-    /* CSR Email / Edge Function */
-    try {
-      await fetch(
-        'https://welhzcasuabhqoccfxtu.functions.supabase.co/notify-csr-on-submit',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intake_id: intakeId }),
-        }
-      )
-    } catch (err) {
-      console.error('CSR email notification failed:', err)
     }
 
     setSubmitted(true)
@@ -119,7 +140,7 @@ export default function IntakeFormPage() {
 
   /* ================= RENDER FORM ================= */
   return (
-    <div className="max-w-3xl mx-auto p-10">
+    <div className="max-w-4xl mx-auto p-10">
       <h1 className="text-2xl font-semibold mb-6">
         Insurance Intake Form
       </h1>
@@ -130,37 +151,51 @@ export default function IntakeFormPage() {
         </div>
       )}
 
-      {formType === 'home' && (
+      {/* PDF ORDER – DO NOT CHANGE */}
+      <PrimaryApplicantForm
+        data={formData.primary_applicant}
+        onChange={val => updateSection('primary_applicant', val)}
+        disabled={isPreview}
+      />
+
+      <CoApplicantForm
+        data={formData.co_applicant}
+        onChange={val => updateSection('co_applicant', val)}
+        disabled={isPreview}
+      />
+
+      {(formType === 'home' || formType === 'home_auto') && (
         <HomeInsuranceForm
-          data={formData}
-          onChange={handleFieldChange}
+          data={formData.home}
+          onChange={val => updateSection('home', val)}
           disabled={isPreview}
         />
       )}
 
-      {formType === 'auto' && (
+      {(formType === 'auto' || formType === 'home_auto') && (
         <AutoInsuranceForm
-          data={formData}
-          onChange={handleFieldChange}
-          disabled={isPreview}
-        />
-      )}
-
-      {formType === 'condo' && (
-        <CondoInsuranceForm
-          data={formData}
-          onChange={handleFieldChange}
+          data={formData.auto}
+          onChange={val => updateSection('auto', val)}
           disabled={isPreview}
         />
       )}
 
       {!isPreview && (
-        <button
-          onClick={handleSubmit}
-          className="mt-6 w-full bg-green-600 text-white py-3 rounded"
-        >
-          Submit Form
-        </button>
+        <div className="mt-8 space-y-3">
+          <button
+            onClick={handleSave}
+            className="w-full bg-gray-600 text-white py-3 rounded"
+          >
+            Save & Continue Later
+          </button>
+
+          <button
+            onClick={handleSubmit}
+            className="w-full bg-green-600 text-white py-3 rounded"
+          >
+            Submit Form
+          </button>
+        </div>
       )}
     </div>
   )

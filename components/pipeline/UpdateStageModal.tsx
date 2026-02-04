@@ -60,7 +60,7 @@ export default function UpdateStageModal({
     setLoading(false)
   }
 
-  /* ================= SAFE CLIENT-SIDE VALIDATION ================= */
+  /* ================= CLIENT VALIDATION ================= */
   function validateClientSide() {
     for (const key in mandatoryFields) {
       const cfg = mandatoryFields[key]
@@ -68,9 +68,7 @@ export default function UpdateStageModal({
 
       if (
         cfg.required &&
-        (value === undefined ||
-          value === null ||
-          value === '')
+        (value === undefined || value === null || value === '')
       ) {
         alert(`Please fill "${cfg.label}"`)
         return false
@@ -84,50 +82,21 @@ export default function UpdateStageModal({
     const value = formData[fieldKey] ?? ''
 
     switch (config.type) {
-      case 'date':
-        return (
-          <input
-            type="date"
-            className="w-full border p-2"
-            value={value}
-            onChange={e =>
-              setFormData({ ...formData, [fieldKey]: e.target.value })
-            }
-          />
-        )
+      case 'date': {
+  const today = new Date().toISOString().split('T')[0]
 
-      case 'boolean':
-        return (
-          <select
-            className="w-full border p-2"
-            value={value}
-            onChange={e =>
-              setFormData({ ...formData, [fieldKey]: e.target.value })
-            }
-          >
-            <option value="">Select</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        )
-
-      case 'dropdown':
-        return (
-          <select
-            className="w-full border p-2"
-            value={value}
-            onChange={e =>
-              setFormData({ ...formData, [fieldKey]: e.target.value })
-            }
-          >
-            <option value="">Select</option>
-            {config.options?.map(opt => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        )
+  return (
+    <input
+      type="date"
+      className="w-full border p-2"
+      value={value}
+      min={today} // ✅ BLOCK BACK DATES
+      onChange={(e) =>
+        setFormData({ ...formData, [fieldKey]: e.target.value })
+      }
+    />
+  )
+}
 
       case 'number':
         return (
@@ -135,12 +104,13 @@ export default function UpdateStageModal({
             type="number"
             className="w-full border p-2"
             value={value}
-            onChange={e =>
+            onChange={(e) =>
               setFormData({
                 ...formData,
-                [fieldKey]: e.target.value === ''
-                  ? ''
-                  : Number(e.target.value),
+                [fieldKey]:
+                  e.target.value === ''
+                    ? ''
+                    : Number(e.target.value),
               })
             }
           />
@@ -152,10 +122,28 @@ export default function UpdateStageModal({
             className="w-full border p-2"
             rows={3}
             value={value}
-            onChange={e =>
+            onChange={(e) =>
               setFormData({ ...formData, [fieldKey]: e.target.value })
             }
           />
+        )
+
+      case 'dropdown':
+        return (
+          <select
+            className="w-full border p-2"
+            value={value}
+            onChange={(e) =>
+              setFormData({ ...formData, [fieldKey]: e.target.value })
+            }
+          >
+            <option value="">Select</option>
+            {config.options?.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
         )
 
       default:
@@ -164,7 +152,7 @@ export default function UpdateStageModal({
             type="text"
             className="w-full border p-2"
             value={value}
-            onChange={e =>
+            onChange={(e) =>
               setFormData({ ...formData, [fieldKey]: e.target.value })
             }
           />
@@ -172,7 +160,7 @@ export default function UpdateStageModal({
     }
   }
 
-  /* ================= SAVE (BACKEND IS FINAL AUTHORITY) ================= */
+  /* ================= SAVE ================= */
   async function handleSave() {
     if (!selectedStageId) {
       alert('Please select a status')
@@ -183,13 +171,29 @@ export default function UpdateStageModal({
 
     setSaving(true)
 
+    // 🔍 DEBUG — VERY IMPORTANT
+    console.log('SENDING TO API:', {
+      leadId,
+      stageId: selectedStageId,
+      stageMetadata: formData,
+    })
+
     const res = await fetch('/api/update-stage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         leadId,
         stageId: selectedStageId,
-        formData,
+        stageMetadata: {
+          ...formData,
+          // normalize boolean if ever used
+          email_sent:
+            formData.email_sent === 'yes'
+              ? true
+              : formData.email_sent === 'no'
+              ? false
+              : formData.email_sent,
+        },
       }),
     })
 
@@ -197,7 +201,8 @@ export default function UpdateStageModal({
     setSaving(false)
 
     if (!res.ok) {
-      alert(result.error || 'Status update validation failed')
+      alert(result.error || 'Status update failed')
+      console.error(result)
       return
     }
 
@@ -220,14 +225,13 @@ export default function UpdateStageModal({
               const stageId = e.target.value
               setSelectedStageId(stageId)
 
-              const stage = stages.find(s => s.id === stageId)
-
+              const stage = stages.find((s) => s.id === stageId)
               setMandatoryFields(stage?.mandatory_fields || {})
               setFormData({})
             }}
           >
             <option value="">Select new status</option>
-            {stages.map(stage => (
+            {stages.map((stage) => (
               <option key={stage.id} value={stage.id}>
                 {stage.stage_name}
               </option>
@@ -237,18 +241,20 @@ export default function UpdateStageModal({
 
         {/* ================= DYNAMIC FIELDS ================= */}
         {Object.entries(mandatoryFields).map(([key, config]) => (
-          <div key={key} className="mt-3">
+          <div key={key}>
             <label className="block text-sm font-medium mb-1">
               {config.label}
               {config.required && ' *'}
             </label>
-
             {renderField(key, config)}
           </div>
         ))}
 
         <div className="flex justify-end gap-3 pt-4">
-          <button onClick={onClose} className="px-4 py-2 border rounded">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded"
+          >
             Cancel
           </button>
           <button
