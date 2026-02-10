@@ -68,6 +68,8 @@ export default function MyLeadsPage() {
           )
         `)
         .eq('assigned_csr', user.id)
+        .eq('insurence_category', 'personal')
+        .eq('policy_flow', 'new')
         .order('created_at', { ascending: false })
 
       /* ✅ FIXED FILTER */

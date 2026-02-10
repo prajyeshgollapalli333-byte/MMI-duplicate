@@ -1,6 +1,6 @@
 'use client'
 
-import { LayoutGrid, Settings, GitBranch } from 'lucide-react'
+import { LayoutGrid, Settings, GitBranch, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
@@ -45,6 +45,15 @@ export default function Sidebar({ setIsHovered, isHovered }: SidebarProps) {
                         icon={<GitBranch size={28} />}
                         label="Personal Pipeline"
                         active={isActive('/dashboard/leads')}
+                        expanded={isHovered}
+                    />
+                </Link>
+
+                <Link href="/dashboard/renewals" className="w-full">
+                    <SidebarIcon
+                        icon={<RefreshCw size={28} />}
+                        label="Personal Line Renewal Pipeline"
+                        active={isActive('/dashboard/renewals')}
                         expanded={isHovered}
                     />
                 </Link>
