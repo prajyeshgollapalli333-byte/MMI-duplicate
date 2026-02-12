@@ -52,7 +52,7 @@ export default function Sidebar({ setIsHovered, isHovered }: SidebarProps) {
                 <Link href="/dashboard/renewals" className="w-full">
                     <SidebarIcon
                         icon={<RefreshCw size={28} />}
-                        label="Personal Line Renewal Pipeline"
+                        label="Personal Line Renewal"
                         active={isActive('/dashboard/renewals')}
                         expanded={isHovered}
                     />

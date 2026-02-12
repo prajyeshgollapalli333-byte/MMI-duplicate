@@ -5,6 +5,7 @@ import {
   UserPlus,
   GitBranch,
   List,
+  RefreshCw,
 } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -16,7 +17,7 @@ export default function DashboardPage() {
         Quick Actions
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <ActionCard
           title="New Client"
           icon={<UserPlus size={28} />}
@@ -27,6 +28,12 @@ export default function DashboardPage() {
           title="Personal Pipeline"
           icon={<GitBranch size={28} />}
           onClick={() => router.push('/dashboard/leads')}
+        />
+
+        <ActionCard
+          title="Personal Renewal Pipeline"
+          icon={<RefreshCw size={28} />}
+          onClick={() => router.push('/dashboard/renewals')}
         />
 
         <ActionCard
