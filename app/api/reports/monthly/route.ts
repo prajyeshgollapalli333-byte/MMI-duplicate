@@ -180,7 +180,7 @@ export async function POST(request: Request) {
     }
 
     if (exportType === 'pdf') {
-        const PDFDocument = require('pdfkit')
+        const { default: PDFDocument } = await import('pdfkit')
 
         // Create a new PDF document
         const doc = new PDFDocument({ margin: 30, size: 'A4' })
